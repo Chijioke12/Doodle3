@@ -35,8 +35,8 @@ jobs:
         run: |
           mkdir -p build
           # -s WASM=0 forces compilation to asm.js instead of WebAssembly
-          # -s MIN_FIREFOX_VERSION=48 and -s LEGACY_VM_SUPPORT=1 target Firefox 48 compatibility without syntax errors
-          emcc game.c -O2 -s WASM=0 -s MIN_FIREFOX_VERSION=48 -s LEGACY_VM_SUPPORT=1 -s ENVIRONMENT='web' -s USE_SDL=2 -s USE_SDL_IMAGE=2 -s SDL2_IMAGE_FORMATS='["png"]' --preload-file public/assets@/assets -s ALLOW_MEMORY_GROWTH=1 -o build/game.js
+          # -s MIN_FIREFOX_VERSION=79 (minimum supported by emcc) and -s LEGACY_VM_SUPPORT=1 for legacy browser compatibility
+          emcc game.c -O2 -s WASM=0 -s MIN_FIREFOX_VERSION=79 -s LEGACY_VM_SUPPORT=1 -s ENVIRONMENT='web' -s USE_SDL=2 -s USE_SDL_IMAGE=2 -s SDL2_IMAGE_FORMATS='["png"]' --preload-file public/assets@/assets -s ALLOW_MEMORY_GROWTH=1 -o build/game.js
           
           # Update public assets & base64 bundle
           cp build/game.js public/game.js
