@@ -51,30 +51,35 @@ export default function App() {
         }
         const buffer = bytes.buffer;
         
+        const canvasElem = canvasRef.current || (document.getElementById('canvas') as HTMLCanvasElement);
         (window as any).Module = {
           noImageDecoding: true,
-          canvas: canvasRef.current,
+          canvas: canvasElem,
           print: (text: string) => console.log(text),
           printErr: (text: string) => console.error(text),
           getPreloadedPackage: (remotePackageName: string, remotePackageSize: number) => {
             return buffer;
           },
           preRun: [() => {
-            const b = (window as any).Browser;
+            const b = (window as any).Browser || (window as any).Module?.Browser;
             if (b) {
               b.preloadedImages = b.preloadedImages || {};
               Object.assign(b.preloadedImages, preloadedCanvases);
               console.log("Successfully injected preloaded images into Browser object.");
             } else {
-              console.error("window.Browser not found!");
+              console.warn("Browser object not initialized in preRun yet.");
             }
           }]
         };
         
-        const script = document.createElement('script');
-        script.src = 'game.js';
-        script.onload = () => setGameLoaded(true);
-        document.body.appendChild(script);
+        // Dynamically import src/game.js so Vite and @vitejs/plugin-legacy process it
+        try {
+          await import('./game.js');
+          setGameLoaded(true);
+        } catch (err) {
+          console.error("Error loading game.js:", err);
+          setGameLoaded(true);
+        }
       };
       
       loadImages();
