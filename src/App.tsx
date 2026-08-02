@@ -4,74 +4,119 @@
  */
 
 import { useEffect, useState, useRef } from 'preact/hooks';
-import { DoodleJumpEngine, GameState } from './gameEngine';
 
 export default function App() {
   const [gameLoaded, setGameLoaded] = useState(false);
-  const [gameState, setGameState] = useState<GameState>({
-    score: 0,
-    highScore: 0,
-    gameOver: false,
-    paused: false,
-  });
+  const [loadError, setLoadError] = useState<string | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const engineRef = useRef<DoodleJumpEngine | null>(null);
 
   useEffect(() => {
-    if (canvasRef.current && !engineRef.current) {
-      engineRef.current = new DoodleJumpEngine(canvasRef.current, (state) => {
-        setGameState(state);
-      });
+    if (!canvasRef.current) return;
+
+    // Configure Emscripten Module
+    (window as any).Module = {
+      canvas: canvasRef.current,
+      locateFile: (path: string, prefix: string) => {
+        if (path.endsWith('.mem')) return '/game.js.mem';
+        if (path.endsWith('.data')) return '/game.data';
+        return prefix + path;
+      },
+      print: (text: string) => console.log('[Emscripten]', text),
+      printErr: (text: string) => console.error('[Emscripten]', text),
+      onRuntimeInitialized: () => {
+        console.log('Emscripten runtime initialized!');
+        setGameLoaded(true);
+      },
+      postRun: [
+        () => {
+          setGameLoaded(true);
+        },
+      ],
+    };
+
+    const scriptId = 'emscripten-game-script';
+    let script = document.getElementById(scriptId) as HTMLScriptElement | null;
+
+    if (!script) {
+      script = document.createElement('script');
+      script.id = scriptId;
+      script.src = '/game.js';
+      script.async = true;
+      script.onerror = () => {
+        setLoadError('Failed to load game.js binary.');
+      };
+      document.body.appendChild(script);
+    } else {
       setGameLoaded(true);
     }
-
-    return () => {
-      if (engineRef.current) {
-        engineRef.current.destroy();
-        engineRef.current = null;
-      }
-    };
   }, []);
+
+  const dispatchKey = (type: 'keydown' | 'keyup', key: string, keyCode: number) => {
+    const event = new KeyboardEvent(type, {
+      key: key,
+      code: key,
+      keyCode: keyCode,
+      which: keyCode,
+      bubbles: true,
+      cancelable: true,
+    });
+    window.dispatchEvent(event);
+    if (canvasRef.current) {
+      canvasRef.current.dispatchEvent(event);
+    }
+  };
 
   const handleLeftDown = (e: Event) => {
     e.preventDefault();
-    if (engineRef.current) engineRef.current.setLeftKey(true);
+    dispatchKey('keydown', 'ArrowLeft', 37);
   };
 
   const handleLeftUp = (e: Event) => {
     e.preventDefault();
-    if (engineRef.current) engineRef.current.setLeftKey(false);
+    dispatchKey('keyup', 'ArrowLeft', 37);
   };
 
   const handleRightDown = (e: Event) => {
     e.preventDefault();
-    if (engineRef.current) engineRef.current.setRightKey(true);
+    dispatchKey('keydown', 'ArrowRight', 39);
   };
 
   const handleRightUp = (e: Event) => {
     e.preventDefault();
-    if (engineRef.current) engineRef.current.setRightKey(false);
+    dispatchKey('keyup', 'ArrowRight', 39);
   };
 
-  const handleShoot = (e: Event) => {
+  const handleShootDown = (e: Event) => {
     e.preventDefault();
-    if (engineRef.current) engineRef.current.shoot();
+    dispatchKey('keydown', 'Enter', 13);
+  };
+
+  const handleShootUp = (e: Event) => {
+    e.preventDefault();
+    dispatchKey('keyup', 'Enter', 13);
   };
 
   return (
     <div className="app-container">
       {/* Canvas Target */}
       <div className="canvas-wrapper">
-        {!gameLoaded && (
+        {!gameLoaded && !loadError && (
           <div className="loading-overlay">
-            <div className="loading-text">Loading Game...</div>
+            <div className="loading-text">Loading C/asm.js Binary...</div>
           </div>
         )}
-        <canvas 
+        {loadError && (
+          <div className="loading-overlay">
+            <div className="loading-text" style={{ color: '#ff6b6b' }}>
+              {loadError}
+            </div>
+          </div>
+        )}
+        <canvas
           id="canvas"
           ref={canvasRef}
-          width="240" 
-          height="320" 
+          width="240"
+          height="320"
           className="game-canvas"
           onContextMenu={(e) => e.preventDefault()}
         />
@@ -90,14 +135,15 @@ export default function App() {
           >
             ←
           </button>
-          
+
           <button
             className="control-btn fire-btn"
-            onPointerDown={handleShoot}
+            onPointerDown={handleShootDown}
+            onPointerUp={handleShootUp}
             onContextMenu={(e) => e.preventDefault()}
             title="Shoot / Restart (Enter / 5)"
           >
-            {gameState.gameOver ? '🔄' : '🔥'}
+            🔥
           </button>
 
           <button
@@ -115,3 +161,4 @@ export default function App() {
     </div>
   );
 }
+
