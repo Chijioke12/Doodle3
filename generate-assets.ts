@@ -10,9 +10,11 @@ async function main() {
   const assetsTs: Record<string, string> = {};
   
   for (const asset of ASSET_CATALOG) {
-    if (asset.id === 'bg_notebook') continue;
     const buffer = generateAssetCanvas(asset.id);
     fs.writeFileSync(path.join(assetsDir, `${asset.id}.png`), buffer);
+    if (asset.id === 'bg_notebook') {
+      fs.writeFileSync(path.join(assetsDir, `background.png`), buffer);
+    }
     assetsTs[asset.id] = `data:image/png;base64,${buffer.toString('base64')}`;
     console.log(`Generated: ${asset.id}.png`);
   }

@@ -68,9 +68,11 @@ export class DoodleJumpEngine {
     alive: boolean;
     moveDir: number;
     hasSpring: boolean;
+    hasTrampoline?: boolean;
     hasJetpack: boolean;
     hasPropeller: boolean;
-    brokenFrame?: number;
+    springTimer?: number;
+    breakFrame?: number;
   }> = [];
 
   private projectiles: Array<{
@@ -196,15 +198,16 @@ export class DoodleJumpEngine {
     } else if (roll < 75) {
       type = 'moving';
       moveDir = Math.random() < 0.5 ? 1 : -1;
-    } else if (roll < 90) {
+    } else if (roll < 88) {
       type = 'breakable';
     } else {
       type = 'white';
     }
 
-    const hasSpring = type !== 'breakable' && Math.random() < 0.15;
-    const hasJetpack = !hasSpring && type === 'normal' && Math.random() < 0.04;
-    const hasPropeller = !hasSpring && !hasJetpack && type === 'normal' && Math.random() < 0.06;
+    const hasSpring = type !== 'breakable' && Math.random() < 0.14;
+    const hasTrampoline = !hasSpring && type !== 'breakable' && Math.random() < 0.08;
+    const hasJetpack = !hasSpring && !hasTrampoline && type === 'normal' && Math.random() < 0.05;
+    const hasPropeller = !hasSpring && !hasTrampoline && !hasJetpack && type === 'normal' && Math.random() < 0.07;
 
     return {
       x: Math.random() * (this.SCREEN_W - this.PLATFORM_W),
@@ -214,27 +217,17 @@ export class DoodleJumpEngine {
       alive: true,
       moveDir,
       hasSpring,
+      hasTrampoline,
       hasJetpack,
       hasPropeller,
+      springTimer: 0,
+      breakFrame: 0,
     };
   }
 
   private spawnMonster(y: number) {
-    if (Math.random() > 0.18 || this.monsters.length >= 2) return;
-
-    const types: Array<'green' | 'purple' | 'red' | 'ufo'> = ['green', 'purple', 'red', 'ufo'];
-    const type = types[Math.floor(Math.random() * types.length)];
-    const startX = 20 + Math.random() * (this.SCREEN_W - 60);
-
-    this.monsters.push({
-      x: startX,
-      y: y - 40,
-      type,
-      alive: true,
-      moveDir: Math.random() < 0.5 ? 1 : -1,
-      startX,
-      frame: 0,
-    });
+    // Disabled per prompt request ("don't add enemies")
+    return;
   }
 
   private setupEventListeners() {
@@ -344,13 +337,22 @@ export class DoodleJumpEngine {
       }
     }
 
+    // Update platform states
+    for (const p of this.platforms) {
+      if (p.springTimer > 0) p.springTimer--;
+      if (p.breakFrame > 0) {
+        p.breakFrame++;
+        if (p.breakFrame > 15) p.alive = false;
+      }
+    }
+
     // Platform collisions (only while falling down without powerups)
     if (this.player.vy > 0 && this.player.hasJetpack === 0 && this.player.hasPropeller === 0) {
       const feetPrev = this.player.y + 24 - this.player.vy;
       const feetNow = this.player.y + 24;
 
       for (const p of this.platforms) {
-        if (!p.alive) continue;
+        if (!p.alive || p.breakFrame > 0) continue;
 
         const alignX = this.player.x + 24 > p.x && this.player.x < p.x + p.width;
         if (alignX && feetPrev <= p.y && feetNow >= p.y) {
@@ -364,39 +366,22 @@ export class DoodleJumpEngine {
             p.hasPropeller = false;
           } else if (p.hasSpring) {
             this.player.vy = this.SPRING_VELOCITY;
+            p.springTimer = 12;
             p.hasSpring = false;
+          } else if (p.hasTrampoline) {
+            this.player.vy = -18.0;
+            p.springTimer = 12;
+            p.hasTrampoline = false;
           } else {
             this.player.vy = this.JUMP_VELOCITY;
           }
 
           if (p.type === 'breakable') {
+            p.breakFrame = 1;
+          } else if (p.type === 'white') {
             p.alive = false;
           }
           break;
-        }
-      }
-    }
-
-    // Monster collisions
-    for (const m of this.monsters) {
-      if (!m.alive) continue;
-      m.frame++;
-      m.x += m.moveDir * 0.8;
-      if (Math.abs(m.x - m.startX) > 40) m.moveDir *= -1;
-
-      // Distance check
-      const dist = Math.hypot(this.player.x + 12 - (m.x + 16), this.player.y + 12 - (m.y + 16));
-      if (dist < 22) {
-        if (this.player.vy > 0 && this.player.y + 24 < m.y + 12) {
-          // Bounce off monster head
-          this.player.vy = this.JUMP_VELOCITY;
-          m.alive = false;
-          this.score += 100;
-        } else if (this.player.hasJetpack === 0 && this.player.hasPropeller === 0) {
-          // Player hit by monster
-          this.gameOver = true;
-          this.saveHighScore();
-          this.emitState();
         }
       }
     }
@@ -432,11 +417,10 @@ export class DoodleJumpEngine {
     }
 
     for (const p of this.platforms) {
-      if (p.y - this.cameraY > this.SCREEN_H + 20 || !p.alive) {
+      if (p.y - this.cameraY > this.SCREEN_H + 20 || (!p.alive && p.breakFrame === 0)) {
         const newY = topY - (35 + Math.random() * 30);
         Object.assign(p, this.createPlatform(newY));
         topY = newY;
-        this.spawnMonster(newY);
       }
     }
 
@@ -464,37 +448,41 @@ export class DoodleJumpEngine {
   }
 
   private render() {
-    // Clear background (soft grid paper blue sky)
-    this.ctx.fillStyle = '#cdebea';
-    this.ctx.fillRect(0, 0, this.SCREEN_W, this.SCREEN_H);
-
-    // Draw grid lines for classic Doodle Jump paper aesthetic
-    this.ctx.strokeStyle = 'rgba(180, 220, 240, 0.4)';
-    this.ctx.lineWidth = 1;
-    for (let x = 0; x < this.SCREEN_W; x += 15) {
-      this.ctx.beginPath();
-      this.ctx.moveTo(x, 0);
-      this.ctx.lineTo(x, this.SCREEN_H);
-      this.ctx.stroke();
-    }
-    const offsetY = Math.floor(-this.cameraY % 15);
-    for (let y = offsetY; y < this.SCREEN_H; y += 15) {
-      this.ctx.beginPath();
-      this.ctx.moveTo(0, y);
-      this.ctx.lineTo(this.SCREEN_W, y);
-      this.ctx.stroke();
+    // Draw Notebook Paper Background
+    const bgImg = this.images['bg_notebook'] || this.images['background'];
+    if (bgImg) {
+      this.ctx.drawImage(bgImg, 0, 0, this.SCREEN_W, this.SCREEN_H);
+    } else {
+      this.ctx.fillStyle = '#f7f6ed';
+      this.ctx.fillRect(0, 0, this.SCREEN_W, this.SCREEN_H);
+      this.ctx.strokeStyle = '#e0ecf8';
+      this.ctx.lineWidth = 1;
+      for (let x = 0; x <= this.SCREEN_W; x += 15) {
+        this.ctx.beginPath(); this.ctx.moveTo(x, 0); this.ctx.lineTo(x, this.SCREEN_H); this.ctx.stroke();
+      }
+      for (let y = 0; y <= this.SCREEN_H; y += 15) {
+        this.ctx.beginPath(); this.ctx.moveTo(0, y); this.ctx.lineTo(this.SCREEN_W, y); this.ctx.stroke();
+      }
     }
 
     // Render Platforms
     for (const p of this.platforms) {
-      if (!p.alive) continue;
+      if (!p.alive && p.breakFrame === 0) continue;
       const screenY = p.y - this.cameraY;
       if (screenY < -20 || screenY > this.SCREEN_H + 20) continue;
 
       let key = 'platform_green';
-      if (p.type === 'moving') key = 'platform_blue';
-      else if (p.type === 'breakable') key = 'brown_platform_1';
-      else if (p.type === 'white') key = 'platform_white';
+      if (p.breakFrame > 0) {
+        if (p.breakFrame <= 5) key = 'brown_platform_1';
+        else if (p.breakFrame <= 10) key = 'brown_platform_2';
+        else key = 'brown_platform_3';
+      } else if (p.type === 'moving') {
+        key = 'platform_blue';
+      } else if (p.type === 'breakable') {
+        key = 'brown_platform_1';
+      } else if (p.type === 'white') {
+        key = 'platform_white';
+      }
 
       const img = this.images[key];
       if (img) {
@@ -505,10 +493,20 @@ export class DoodleJumpEngine {
       }
 
       // Draw Spring
-      if (p.hasSpring) {
-        const springImg = this.images['spring_compressed'];
+      if (p.hasSpring || (p.springTimer > 0 && !p.hasTrampoline)) {
+        const springKey = p.springTimer > 0 ? 'spring_full' : 'spring_compressed';
+        const springImg = this.images[springKey];
         if (springImg) {
           this.ctx.drawImage(springImg, p.x + p.width / 2 - 7, screenY - 11, 14, 11);
+        }
+      }
+
+      // Draw Trampoline
+      if (p.hasTrampoline) {
+        const trampKey = p.springTimer > 0 ? 'trampoline_down' : 'trampoline';
+        const trampImg = this.images[trampKey];
+        if (trampImg) {
+          this.ctx.drawImage(trampImg, p.x + p.width / 2 - 10, screenY - 8, 20, 9);
         }
       }
 
