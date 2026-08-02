@@ -1,0 +1,14 @@
+{
+  "name": "KaiOS Doodle Jump",
+  "description": "KaiOS Doodle Jump built with C and asm.js",
+  "launch_path": "/index.html",
+  "type": "web",
+  "developer": {
+    "name": "Developer"
+  },
+  "default_locale": "en-US",
+  "fullscreen": true,
+  "precompile": [
+    "game.js"
+  ]
+}

@@ -1,0 +1,91 @@
+/* Global styles */
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, sans-serif;
+  background-color: #0f172a;
+  color: #e2e8f0;
+  touch-action: none;
+}
+
+.app-container {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.canvas-wrapper {
+  background-color: #000;
+  padding: 8px;
+  border-radius: 12px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  border: 1px solid #334155;
+  margin-bottom: 24px;
+  position: relative;
+}
+
+.loading-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(0, 0, 0, 0.8);
+  border-radius: 12px;
+  z-index: 10;
+}
+
+.loading-text {
+  color: #fbbf24;
+  font-weight: 500;
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .5; }
+}
+
+.game-canvas {
+  background-color: #1e293b;
+  display: block;
+  border-radius: 4px;
+}
+
+.controls-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.controls-row {
+  display: flex;
+  gap: 32px;
+}
+
+.control-btn {
+  width: 64px;
+  height: 64px;
+  background-color: #334155;
+  border: none;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+  user-select: none;
+  cursor: pointer;
+  color: white;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.control-btn:active {
+  background-color: #64748b;
+}

@@ -1,0 +1,6 @@
+{
+  "name": "Doodle Jump",
+  "description": "A classic Doodle Jump platformer game with interactive controls.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

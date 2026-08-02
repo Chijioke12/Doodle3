@@ -1,0 +1,55 @@
+name: Build C to asm.js
+
+on:
+  push:
+    branches: [ "main", "master" ]
+    paths:
+      - '**.c'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Generate assets
+        run: npx tsx generate-assets.ts
+
+      - name: Setup Emscripten
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: latest
+          actions-cache-folder: 'emsdk-cache'
+
+      - name: Compile game.c to asm.js for Firefox 48
+        run: |
+          mkdir -p build
+          # -s WASM=0 forces compilation to asm.js instead of WebAssembly
+          # -s MIN_FIREFOX_VERSION=48 and -s LEGACY_VM_SUPPORT=1 target Firefox 48 compatibility without syntax errors
+          emcc game.c -O2 -s WASM=0 -s MIN_FIREFOX_VERSION=48 -s LEGACY_VM_SUPPORT=1 -s ENVIRONMENT='web' -s USE_SDL=2 -s USE_SDL_IMAGE=2 -s SDL2_IMAGE_FORMATS='["png"]' --preload-file public/assets@/assets -s ALLOW_MEMORY_GROWTH=1 -o build/game.js
+          
+          # Update public assets & base64 bundle
+          cp build/game.js public/game.js
+          cp build/game.data public/game.data
+          node convert.js
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: game-asmjs
+          path: |
+            build/game.js
+            build/game.data
+            public/game.js
+            public/game.data
+            src/gameData.ts
