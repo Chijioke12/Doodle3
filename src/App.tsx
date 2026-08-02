@@ -4,114 +4,58 @@
  */
 
 import { useEffect, useState, useRef } from 'preact/hooks';
-import { GAME_ASSETS } from './assets.ts';
-
-import { GAME_DATA_BASE64 } from './gameData.ts';
+import { DoodleJumpEngine, GameState } from './gameEngine';
 
 export default function App() {
   const [gameLoaded, setGameLoaded] = useState(false);
+  const [gameState, setGameState] = useState<GameState>({
+    score: 0,
+    highScore: 0,
+    gameOver: false,
+    paused: false,
+  });
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const engineRef = useRef<DoodleJumpEngine | null>(null);
 
   useEffect(() => {
-    // Auto-load game script on mount
-    if (!document.querySelector('script[src*="game.js"]') && canvasRef.current) {
-      
-      const loadImages = async () => {
-        const preloadedCanvases: Record<string, HTMLCanvasElement> = {};
-        
-        for (const [key, base64] of Object.entries(GAME_ASSETS)) {
-          try {
-            await new Promise<void>((resolve, reject) => {
-              const img = new Image();
-              img.src = base64;
-              img.onload = () => {
-                const canvas = document.createElement('canvas');
-                canvas.width = img.width;
-                canvas.height = img.height;
-                const ctx = canvas.getContext('2d');
-                if (ctx) {
-                  ctx.drawImage(img, 0, 0);
-                }
-                preloadedCanvases[`/assets/${key}.png`] = canvas;
-                resolve();
-              };
-              img.onerror = reject;
-            });
-          } catch (err) {
-            console.error(`Failed to preload image: ${key}`, err);
-          }
-        }
-        
-        // Convert base64 to ArrayBuffer
-        const binaryString = window.atob(GAME_DATA_BASE64);
-        const len = binaryString.length;
-        const bytes = new Uint8Array(len);
-        for (let i = 0; i < len; i++) {
-          bytes[i] = binaryString.charCodeAt(i);
-        }
-        const buffer = bytes.buffer;
-        
-        const canvasElem = canvasRef.current || (document.getElementById('canvas') as HTMLCanvasElement);
-        (window as any).Module = {
-          noImageDecoding: true,
-          canvas: canvasElem,
-          print: (text: string) => console.log(text),
-          printErr: (text: string) => console.error(text),
-          getPreloadedPackage: (remotePackageName: string, remotePackageSize: number) => {
-            return buffer;
-          },
-          preRun: [() => {
-            const b = (window as any).Browser || (window as any).Module?.Browser;
-            if (b) {
-              b.preloadedImages = b.preloadedImages || {};
-              Object.assign(b.preloadedImages, preloadedCanvases);
-              console.log("Successfully injected preloaded images into Browser object.");
-            } else {
-              console.warn("Browser object not initialized in preRun yet.");
-            }
-          }]
-        };
-        
-        // Dynamically import src/game.js so Vite and @vitejs/plugin-legacy process it
-        try {
-          await import('./game.js');
-          setGameLoaded(true);
-        } catch (err) {
-          console.error("Error loading game.js:", err);
-          setGameLoaded(true);
-        }
-      };
-      
-      loadImages();
-    } else {
+    if (canvasRef.current && !engineRef.current) {
+      engineRef.current = new DoodleJumpEngine(canvasRef.current, (state) => {
+        setGameState(state);
+      });
       setGameLoaded(true);
     }
+
+    return () => {
+      if (engineRef.current) {
+        engineRef.current.destroy();
+        engineRef.current = null;
+      }
+    };
   }, []);
 
-  // Helper to simulate key presses for game controls
-  const simulateKeyEvent = (type: 'keydown' | 'keyup', key: string, keyCode: number, code: string) => {
-    const event = new KeyboardEvent(type, {
-      key: key,
-      keyCode: keyCode,
-      code: code,
-      which: keyCode,
-      bubbles: true,
-      cancelable: true,
-    });
-    document.dispatchEvent(event);
-    if (canvasRef.current) {
-      canvasRef.current.dispatchEvent(event);
-    }
+  const handleLeftDown = (e: Event) => {
+    e.preventDefault();
+    if (engineRef.current) engineRef.current.setLeftKey(true);
   };
 
-  const handleControlDown = (key: string, keyCode: number, code: string) => (e: Event) => {
+  const handleLeftUp = (e: Event) => {
     e.preventDefault();
-    simulateKeyEvent('keydown', key, keyCode, code);
+    if (engineRef.current) engineRef.current.setLeftKey(false);
   };
 
-  const handleControlUp = (key: string, keyCode: number, code: string) => (e: Event) => {
+  const handleRightDown = (e: Event) => {
     e.preventDefault();
-    simulateKeyEvent('keyup', key, keyCode, code);
+    if (engineRef.current) engineRef.current.setRightKey(true);
+  };
+
+  const handleRightUp = (e: Event) => {
+    e.preventDefault();
+    if (engineRef.current) engineRef.current.setRightKey(false);
+  };
+
+  const handleShoot = (e: Event) => {
+    e.preventDefault();
+    if (engineRef.current) engineRef.current.shoot();
   };
 
   return (
@@ -138,30 +82,31 @@ export default function App() {
         <div className="controls-row">
           <button
             className="control-btn"
-            onPointerDown={handleControlDown('ArrowLeft', 37, 'ArrowLeft')}
-            onPointerUp={handleControlUp('ArrowLeft', 37, 'ArrowLeft')}
-            onPointerOut={handleControlUp('ArrowLeft', 37, 'ArrowLeft')}
+            onPointerDown={handleLeftDown}
+            onPointerUp={handleLeftUp}
+            onPointerOut={handleLeftUp}
             onContextMenu={(e) => e.preventDefault()}
+            title="Move Left (or Left Arrow / 4)"
           >
             ←
           </button>
           
           <button
-            className="control-btn"
-            onPointerDown={handleControlDown('Enter', 13, 'Enter')}
-            onPointerUp={handleControlUp('Enter', 13, 'Enter')}
-            onPointerOut={handleControlUp('Enter', 13, 'Enter')}
+            className="control-btn fire-btn"
+            onPointerDown={handleShoot}
             onContextMenu={(e) => e.preventDefault()}
+            title="Shoot / Restart (Enter / 5)"
           >
-            🔥
+            {gameState.gameOver ? '🔄' : '🔥'}
           </button>
 
           <button
             className="control-btn"
-            onPointerDown={handleControlDown('ArrowRight', 39, 'ArrowRight')}
-            onPointerUp={handleControlUp('ArrowRight', 39, 'ArrowRight')}
-            onPointerOut={handleControlUp('ArrowRight', 39, 'ArrowRight')}
+            onPointerDown={handleRightDown}
+            onPointerUp={handleRightUp}
+            onPointerOut={handleRightUp}
             onContextMenu={(e) => e.preventDefault()}
+            title="Move Right (or Right Arrow / 6)"
           >
             →
           </button>
